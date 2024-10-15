@@ -1,0 +1,7 @@
+*.class
+.vscode
+
+src/output/
+src/META-INF/
+src/dataload.jar
+bin
