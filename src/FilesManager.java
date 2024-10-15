@@ -57,7 +57,7 @@ public class FilesManager {
     long pointer = 0;
     try {
       Instant start = Instant.now();
-      System.out.println("Reading file: " + this.paths[index]);
+      // System.out.println("Reading file: " + this.paths[index]);
       RandomAccessFile myRaf = new RandomAccessFile(this.folder + this.paths[index], "r");
       myRaf.seek(0);
       long length = myRaf.length();

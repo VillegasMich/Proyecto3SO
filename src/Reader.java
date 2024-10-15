@@ -1,4 +1,3 @@
-import java.io.File;
 import java.io.RandomAccessFile;
 import java.time.*;
 import java.util.ArrayList;
@@ -25,15 +24,14 @@ public class Reader {
                 list.add(line);
                 pointer += PAGE_LIMIT;
             }
-            System.out.println(list.size());
             myRaf.close();
             LocalTime finishTime = java.time.LocalDateTime.now().toLocalTime();
             Instant end = Instant.now();
             System.out.println("Process with PID: " + ProcessHandle.current().pid() +
-                    "File: " + args[0]
+                    " File: " + args[0]
                     + " Finish time: " + finishTime
                     + " Time in process (millis): "
-                    + Duration.between(start, end).toMillis() + "\n");
+                    + Duration.between(start, end).toMillis());
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -13,6 +13,7 @@ public class Initializer {
     private int pathsLength;
     private FilesManager manager;
     private String[] flag;
+    private List<Thread> threads = new ArrayList<>();
     private List<Process> processes = new ArrayList<>();
 
     /**
@@ -35,7 +36,7 @@ public class Initializer {
             }
 
         } catch (Exception e) {
-            System.err.println("La direccion dada no es valida");
+            System.err.println(ConsoleColors.RED + "La direccion dada no es valida" + ConsoleColors.RESET);
         }
     }
 
@@ -48,6 +49,7 @@ public class Initializer {
      * @throws IOException
      *                     If there is a problem with the process to get the result
      */
+    @SuppressWarnings("unused")
     private String getCore(long pid) throws IOException {
         // Get parent PID and current core
         String[] commands = { "ps", "-o", "psr", "-p", "" + pid };
@@ -67,32 +69,41 @@ public class Initializer {
 
     /**
      * Read all the files, where each file must be on an independent
-     * process in the same core as the main program.
+     * thread in the same core as the main program.
      *
      * @return 0 if Ok ; 1 if ends with error
      * @throws IOException
      *                     If there is a problem with the processes
      */
     private int pathS() throws IOException {
-        long mainId = ProcessHandle.current().pid();
         for (int i = 0; i < this.pathsLength; i++) {
-            String core = getCore(mainId);
-            // Create and start new process
-            ProcessBuilder pb = new ProcessBuilder("taskset", "-c", core, "java", "./Reader.java",
-                    manager.getFolder() + manager.getPaths()[i]);
-            Process p = pb.start();
-            // processes.add(p);
+            final int Tindex = i;
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    manager.readIndexFile(Tindex);
+                }
+            });
+            t.start();
+            threads.add(t);
+            // System.out.println("Thread created: " + Tindex);
             if (i == 0) {
                 LocalTime firtstFile = java.time.LocalDateTime.now().toLocalTime();
-                System.out.println("First file load time: " + firtstFile);
+                System.out
+                        .println(ConsoleColors.BLUE_BOLD + "First file load time: " + firtstFile + ConsoleColors.RESET);
             }
             if (i == this.pathsLength - 1) {
                 LocalTime lastFile = java.time.LocalDateTime.now().toLocalTime();
-                System.out.println("Last file load time: " + lastFile);
-                // System.out.println(p.isAlive());
+                System.out.println(
+                        ConsoleColors.BLUE_BOLD + "Last file load time: " + lastFile + "\n" + ConsoleColors.RESET);
             }
-            printData(p);
-            p.destroy();
+        }
+        for (Thread t : threads) {
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
         return 0;
     }
@@ -108,55 +119,29 @@ public class Initializer {
     private int pathM() throws IOException {
         for (int i = 0; i < this.pathsLength; i++) {
             ProcessBuilder pb = new ProcessBuilder("java", "./Reader.java",
-                    manager.getFolder() + manager.getPaths()[i]);
+                    manager.getFolder() + manager.getPaths()[i]).redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT);
             Process p = pb.start();
-            // this.processes.add(p);
+            processes.add(p);
             if (i == 0) {
                 LocalTime firtstFile = java.time.LocalDateTime.now().toLocalTime();
-                System.out.println("First file load time: " + firtstFile);
+                System.out
+                        .println(ConsoleColors.BLUE_BOLD + "First file load time: " + firtstFile + ConsoleColors.RESET);
             }
             if (i == this.pathsLength - 1) {
                 LocalTime lastFile = java.time.LocalDateTime.now().toLocalTime();
-                System.out.println("Last file load time: " + lastFile);
-                // System.out.println(p.isAlive());
+                System.out.println(
+                        ConsoleColors.BLUE_BOLD + "Last file load time: " + lastFile + "\n" + ConsoleColors.RESET);
             }
-            printData(p);
-            p.destroy();
+        }
+        for (Process p : processes) {
+            try {
+                p.waitFor();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
         return 0;
-    }
-
-    /**
-     * It takes a process p and gets the input stream to print the info
-     * in the main process output.
-     *
-     * @param p Procces to get the input stream
-     * @throws IOException
-     *                     if there is a problem with the given process
-     */
-    private void printData(Process p) throws IOException {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(p.getInputStream()))) {
-            String line;
-            if ((line = reader.readLine()) != null) {
-                System.out.println(line);
-            }
-        }
-    }
-
-    public void printData() throws IOException {
-        if (this.processes.size() != 0) {
-            for (int i = 0; i < this.pathsLength; i++) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(processes.get(i).getInputStream()))) {
-                    String line;
-                    if ((line = reader.readLine()) != null) {
-                        System.out.println(line);
-                    }
-                    processes.get(i).destroy();
-                }
-            }
-        }
     }
 
     /**
@@ -176,11 +161,9 @@ public class Initializer {
         } else { // path no flag
             manager.readAllFiles();
         }
-        // processes.getLast().isAlive();
-        // this.printData();
         Instant endTime = Instant.now();
         long executionTime = Duration.between(startTime, endTime).toMillis();
-        System.out.println("Execute total time: " + executionTime + " milliseconds");
+        System.out.println("\nExecute total time: " + executionTime + " milliseconds");
         return 0;
     }
 

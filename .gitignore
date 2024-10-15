@@ -1,6 +1,6 @@
-*.class
+src/*.class
 .vscode
-
+.ds_store
 src/output/
 src/META-INF/
 src/dataload.jar
