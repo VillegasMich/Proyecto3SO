@@ -64,13 +64,16 @@ public class FilesManager {
       byte[] line = new byte[PAGE_LIMIT];
       while (pointer < length) {
         int numRead = myRaf.read(line, 0, PAGE_LIMIT);
-        // System.out.println(numRead + "\n------------------------------");
+        // Buscar por los datos en line!!
         list.add(line);
         pointer += PAGE_LIMIT;
       }
+      // System.out.println("----------------------------------------------------\n");
+      // System.out.println(new String(line));
+      // System.out.println("----------------------------------------------------\n");
       myRaf.close();
       Instant end = Instant.now();
-      System.out.println("Time in process (millis): " + Duration.between(start, end).toMillis());
+      // System.out.println("Time in process a (millis): " + Duration.between(start, end).toMillis());
     } catch (Exception e) {
       e.printStackTrace();
     }
