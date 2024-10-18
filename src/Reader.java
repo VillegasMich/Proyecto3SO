@@ -14,8 +14,9 @@ import java.util.Hashtable;
 import java.util.Enumeration;
 
 public class Reader {
-    static final Pattern popularity = Pattern.compile("\\|[^,]*,((\\d+,?)+),[^,]*");
-    static final Pattern identification = Pattern.compile("([A-Za-z0-9]+)(,[^,]+)+");
+    static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
+    static final Pattern identification = Pattern.compile("(\\n)([A-Za-z0-9]+)(,[0-9.]+).*?(\\d+,\\d+,\\d+,\\d+)");
+
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
     static List<String> list = new ArrayList<>();
@@ -48,24 +49,28 @@ public class Reader {
             e.printStackTrace();
         }
 
-        Runnable r1 = new Analyzer(0);
+        Runnable r1 = new Analyzer(1);
         Runnable r2 = new Analyzer(2);
-        Runnable r3 = new Analyzer(3);
+        Runnable r3= new Analyzer(3);
         Runnable r4 = new Analyzer(4);
         Runnable r5 = new Analyzer(5);
 
         ExecutorService pool = Executors.newFixedThreadPool(MAX_T);
-
-        // passes the Task objects to the pool to execute (Step 3)
+        // for (int i = 0; i < list.size(); i++) {
+        //     Runnable r1 = new Analyzer(i);
+        //     pool.execute(r1);
+        // }
         pool.execute(r1);
         pool.execute(r2);
         pool.execute(r3);
         pool.execute(r4);
         pool.execute(r5);
 
+        // passes the Task objects to the pool to execute (Step 3)
+
         pool.shutdown();
         try {
-            pool.awaitTermination(1000, TimeUnit.MILLISECONDS);
+            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
         }
 
@@ -83,6 +88,7 @@ public class Reader {
                     + metaDict.get(key));
         }
     }
+
 }
 
 class Analyzer implements Runnable {
@@ -93,45 +99,42 @@ class Analyzer implements Runnable {
         this.listIndex = i;
     }
 
-    private int getPopularity(String line) {
-        Matcher m = Reader.popularity.matcher(line);
-        if (m.find()) {
-            String extractedNumbers = m.group(1);
-            String[] numbersArray = extractedNumbers.split(",");
-            Integer[] popularityArray = Arrays.stream(numbersArray)
-                    .map(Integer::parseInt)
-                    .toArray(Integer[]::new);
-            Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum();
-            return popularityTotal;
-        } else {
-            System.out.println(ConsoleColors.RED_BOLD + "Match for popularity not found" + ConsoleColors.RESET);
-            return -1;
-        }
-    }
-
-    private String getIdentification(String line) {
-        Matcher m = Reader.identification.matcher(line);
-        if (m.find()) {
-            String videoId = m.group(1);
-            return videoId;
-        } else {
-            System.out.println(ConsoleColors.RED_BOLD + "Match ID not found" + ConsoleColors.RESET);
-            return null;
-        }
-    }
-
     public void run() {
-        String tid = String.valueOf(Thread.currentThread().threadId());
-        int popularityTotal = getPopularity(Reader.list.get(this.listIndex));
-        String videoId = getIdentification(Reader.list.get(this.listIndex));
         // TODO: Check if new popularity is greater than old one
         // TODO: If ID found but popularity not then move to the next index position
         // TODO: if popularity found but ID not then do not save into dict
-        if (popularityTotal > 0 && videoId != null) {
-            Reader.metaDict.put(tid, new MetaData(videoId, popularityTotal));
+        int maxPopularity = 0;
+        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+        if (Reader.metaDict.get(tid) != null) {
+            maxPopularity = Reader.metaDict.get(tid).popularity;
+        }
+        String line = Reader.list.get(this.listIndex);
+        while (true) {
+            String popularity = "";
+            if (line.indexOf("\n") != -1){
+                line = line.substring(line.indexOf("\n")+1);
+            } else{
+                break;
+            }
+            if (line.indexOf(",") == -1) { //THE SUBSTRING LEFT IS TO SHOT AND THE ID IS CUT
+                break;
+            }
+            String id = line.substring(0, line.indexOf(","));
+            Matcher m = Reader.popularity.matcher(line);
+            if (m.find()) {
+                popularity = m.group(1);
+                String[] numbersArray = popularity.split(",");
+                Integer[] popularityArray = Arrays.stream(numbersArray).map(Integer::parseInt).toArray(Integer[]::new);
+                Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum();     
+                if (popularityTotal > maxPopularity) {
+                    Reader.metaDict.put(tid, new MetaData(id, popularityTotal));
+                }
+            } else{ //ID BUT NOT POPULARITY
+                break; 
+            }
+            line = line.substring(line.indexOf(popularity));
         }
     }
-
 }
 
 class MetaData {
