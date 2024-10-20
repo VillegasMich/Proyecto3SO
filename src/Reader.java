@@ -12,15 +12,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.Dictionary;
 import java.util.Hashtable;
 import java.util.Enumeration;
+import java.util.concurrent.locks.Lock;
 
 public class Reader {
-    static final Pattern popularity = Pattern.compile("\\|[^,]*,((\\d+,?)+),[^,]*");
-    static final Pattern identification = Pattern.compile("([A-Za-z0-9]+)(,[^,]+)+");
+    static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
+    static final Pattern identification = Pattern.compile("^([A-Za-z0-9]{11}),");
+    static final Pattern lineStructure = Pattern.compile("^([A-Za-z0-9]{11})(,[0-9.]+).*?(\\d+,\\d+,\\d+,\\d+),");
+
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
     static List<String> list = new ArrayList<>();
-    static final int MAX_T = 2;
-    static Dictionary<String, MetaData> metaDict = new Hashtable<>();
+    static List<String> splittedList = new ArrayList<>();
+    static final int MAX_T = 10;
+    static Dictionary<String, MetaData> metaDictMax = new Hashtable<>();
+    static Dictionary<String, MetaData> metaDictMin = new Hashtable<>();
+    static Lock lock = new java.util.concurrent.locks.ReentrantLock();
 
     public static void main(String[] args) {
         Instant start = Instant.now();
@@ -35,44 +41,85 @@ public class Reader {
                 list.add(new String(line, StandardCharsets.UTF_8));
                 pointer += PAGE_LIMIT;
             }
-            // System.out.println(list.get(0));
             myRaf.close();
-            LocalTime finishTime = java.time.LocalDateTime.now().toLocalTime();
-            Instant end = Instant.now();
-            // System.out.println("Process with PID: " + ProcessHandle.current().pid() +
-            // " File: " + args[0]
-            // + " Finish time: " + finishTime
-            // + " Time in process (millis): "
-            // + Duration.between(start, end).toMillis());
+
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        Runnable r1 = new Analyzer(0);
-        Runnable r2 = new Analyzer(2);
-        Runnable r3 = new Analyzer(3);
-        Runnable r4 = new Analyzer(4);
-        Runnable r5 = new Analyzer(5);
-
         ExecutorService pool = Executors.newFixedThreadPool(MAX_T);
 
-        // passes the Task objects to the pool to execute (Step 3)
-        pool.execute(r1);
-        pool.execute(r2);
-        pool.execute(r3);
-        pool.execute(r4);
-        pool.execute(r5);
+        for (int i = 0; i < list.size(); i++) {
+            Runnable r1 = new Splitter(i);
+            pool.execute(r1);
+        }
 
-        pool.shutdown();
         try {
-            pool.awaitTermination(1000, TimeUnit.MILLISECONDS);
+            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
         }
 
-        System.out.println(ConsoleColors.WHITE_BOLD + "MetaDict of file " + args[0] +
-                ConsoleColors.RESET);
-        printDict(metaDict);
+        for (int i = 0; i < splittedList.size(); i++) {
+            Runnable r1 = new Analyzer(i);
+            pool.execute(r1);
+        }
 
+        pool.shutdown();
+        try {
+            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+        }
+
+        LocalTime finishTime = java.time.LocalDateTime.now().toLocalTime();
+        Instant end = Instant.now();
+        System.out.print(args[0] + ";" + metaDictMax.get(findMaxPopularity(metaDictMax)).id + ","
+                + metaDictMax.get(findMaxPopularity(metaDictMax)).popularity + ";"
+                + metaDictMin.get(findMinPopularity(metaDictMin)).id + ","
+                + metaDictMin.get(findMinPopularity(metaDictMin)).popularity + ";" +"Process with PID: " +
+                ProcessHandle.current().pid() +
+                " File: " + args[0]
+                + " Finish time: " + finishTime
+                + " Time in process (millis): "
+                + Duration.between(start, end).toMillis()
+                + " ms");
+    }
+
+    public static String findMaxPopularity(Dictionary<String, MetaData> metaDict) {
+        String maxKey = null;
+        int maxPopularity = Integer.MIN_VALUE;
+
+        // Recorrer todas las claves del Dictionary
+        Enumeration<String> claves = metaDict.keys();
+
+        while (claves.hasMoreElements()) {
+            String clave = claves.nextElement();
+            MetaData metadata = metaDict.get(clave);
+
+            if (metadata.popularity > maxPopularity) {
+                maxPopularity = metadata.popularity;
+                maxKey = clave;
+            }
+        }
+        return maxKey;
+    }
+
+    public static String findMinPopularity(Dictionary<String, MetaData> metaDict) {
+        String minKey = null;
+        int minPopularity = Integer.MAX_VALUE;
+
+        // Recorrer todas las claves del Dictionary
+        Enumeration<String> claves = metaDict.keys();
+
+        while (claves.hasMoreElements()) {
+            String clave = claves.nextElement();
+            MetaData metadata = metaDict.get(clave);
+
+            if (metadata.popularity < minPopularity) {
+                minPopularity = metadata.popularity;
+                minKey = clave;
+            }
+        }
+        return minKey;
     }
 
     static void printDict(Dictionary<String, MetaData> metaDict) {
@@ -85,6 +132,38 @@ public class Reader {
     }
 }
 
+class Splitter implements Runnable {
+    private int listIndex;
+
+    public Splitter(int i) {
+        this.listIndex = i;
+    }
+
+    public void run() {
+        String line = Reader.list.get(this.listIndex);
+        while (true) {
+            Matcher m = Reader.lineStructure.matcher(line);
+            if (line.indexOf("\n") != -1 && m.find()) {
+                Reader.lock.lock();
+                Reader.splittedList.add(line.substring(0, line.indexOf("\n")));
+                line = line.substring(line.indexOf("\n") + 1);
+                Reader.lock.unlock();
+            } else {
+                //! Cuando cae por aqui botamos la informacion restante
+                Matcher i = Reader.identification.matcher(line);
+                if (i.find()) {
+                    // Faltan numeros 
+                    break;
+                } else {
+                    // Falta Id
+                    break;
+                }
+                
+            }
+        }
+    }
+}
+
 class Analyzer implements Runnable {
 
     private int listIndex;
@@ -93,45 +172,53 @@ class Analyzer implements Runnable {
         this.listIndex = i;
     }
 
-    private int getPopularity(String line) {
-        Matcher m = Reader.popularity.matcher(line);
-        if (m.find()) {
-            String extractedNumbers = m.group(1);
-            String[] numbersArray = extractedNumbers.split(",");
-            Integer[] popularityArray = Arrays.stream(numbersArray)
-                    .map(Integer::parseInt)
-                    .toArray(Integer[]::new);
-            Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum();
-            return popularityTotal;
-        } else {
-            System.out.println(ConsoleColors.RED_BOLD + "Match for popularity not found" + ConsoleColors.RESET);
-            return -1;
-        }
-    }
-
     private String getIdentification(String line) {
         Matcher m = Reader.identification.matcher(line);
         if (m.find()) {
             String videoId = m.group(1);
             return videoId;
         } else {
-            System.out.println(ConsoleColors.RED_BOLD + "Match ID not found" + ConsoleColors.RESET);
+            // System.out.println(ConsoleColors.RED_BOLD + "Match ID not found" +
+            // ConsoleColors.RESET);
             return null;
         }
     }
 
     public void run() {
-        String tid = String.valueOf(Thread.currentThread().threadId());
-        int popularityTotal = getPopularity(Reader.list.get(this.listIndex));
-        String videoId = getIdentification(Reader.list.get(this.listIndex));
-        // TODO: Check if new popularity is greater than old one
-        // TODO: If ID found but popularity not then move to the next index position
-        // TODO: if popularity found but ID not then do not save into dict
-        if (popularityTotal > 0 && videoId != null) {
-            Reader.metaDict.put(tid, new MetaData(videoId, popularityTotal));
+        int maxPopularity = Integer.MIN_VALUE;
+        int minPopularity = Integer.MAX_VALUE;
+        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+        if (Reader.metaDictMax.get(tid) != null) {
+            maxPopularity = Reader.metaDictMax.get(tid).popularity;
+        }
+        if (Reader.metaDictMin.get(tid) != null) {
+            minPopularity = Reader.metaDictMin.get(tid).popularity;
+        }
+        String currVideo = Reader.splittedList.get(this.listIndex);
+        if (currVideo.indexOf(",") != -1) {
+            //
+            String id = getIdentification(currVideo);
+            if (id != null) {
+                Matcher m = Reader.popularity.matcher(currVideo);
+                if (m.find()) {
+                    String extractedNumbers = m.group(1);
+                    String[] numbersArray = extractedNumbers.split(",");
+                    Integer[] popularityArray = Arrays.stream(numbersArray)
+                            .map(Integer::parseInt)
+                            .toArray(Integer[]::new);
+                    Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum(); // sumamos
+                                                                                                                // por
+                                                                                                                // ahora
+                    if (popularityTotal > maxPopularity) {
+                        Reader.metaDictMax.put(tid, new MetaData(id, popularityTotal));
+                    }
+                    if (popularityTotal < minPopularity) {
+                        Reader.metaDictMin.put(tid, new MetaData(id, popularityTotal));
+                    }
+                }
+            }
         }
     }
-
 }
 
 class MetaData {
@@ -145,7 +232,7 @@ class MetaData {
 
     @Override
     public String toString() {
-        return "[ " + "Id=" + id + ", popularity=" + popularity + " ]";
+        return "[ " + "Id = " + id + ", popularity = " + popularity + " ]";
     }
 
 }
