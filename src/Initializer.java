@@ -1,10 +1,11 @@
 import java.io.InputStreamReader;
 import java.lang.Process;
 import java.lang.ProcessBuilder;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Dictionary;
+import java.util.Enumeration;
+import java.util.Hashtable;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.time.*;
@@ -15,6 +16,8 @@ public class Initializer {
     private String[] flag;
     private List<Thread> threads = new ArrayList<>();
     private List<Process> processes = new ArrayList<>();
+    private Dictionary<String, MetaData> metaDictMin = new Hashtable<>();
+    private Dictionary<String, MetaData> metaDictMax = new Hashtable<>();
 
     /**
      * Creates a FileManger instance and saves all
@@ -65,6 +68,44 @@ public class Initializer {
             }
         }
         return core;
+    }
+
+    private static String findMaxPopularity(Dictionary<String, MetaData> metaDict) {
+        String maxKey = null;
+        int maxPopularity = Integer.MIN_VALUE;
+
+        // Recorrer todas las claves del Dictionary
+        Enumeration<String> claves = metaDict.keys();
+
+        while (claves.hasMoreElements()) {
+            String clave = claves.nextElement();
+            MetaData metadata = metaDict.get(clave);
+
+            if (metadata.popularity > maxPopularity) {
+                maxPopularity = metadata.popularity;
+                maxKey = clave;
+            }
+        }
+        return maxKey;
+    }
+
+    private static String findMinPopularity(Dictionary<String, MetaData> metaDict) {
+        String minKey = null;
+        int minPopularity = Integer.MAX_VALUE;
+
+        // Recorrer todas las claves del Dictionary
+        Enumeration<String> claves = metaDict.keys();
+
+        while (claves.hasMoreElements()) {
+            String clave = claves.nextElement();
+            MetaData metadata = metaDict.get(clave);
+
+            if (metadata.popularity < minPopularity) {
+                minPopularity = metadata.popularity;
+                minKey = clave;
+            }
+        }
+        return minKey;
     }
 
     /**
@@ -119,8 +160,7 @@ public class Initializer {
     private int pathM() throws IOException {
         for (int i = 0; i < this.pathsLength; i++) {
             ProcessBuilder pb = new ProcessBuilder("java", "./Reader.java",
-                    manager.getFolder() + manager.getPaths()[i]).redirectErrorStream(true)
-                    .redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    manager.getFolder() + manager.getPaths()[i]).redirectErrorStream(true);
             Process p = pb.start();
             processes.add(p);
             if (i == 0) {
@@ -134,6 +174,7 @@ public class Initializer {
                         ConsoleColors.BLUE_BOLD + "Last file load time: " + lastFile + "\n" + ConsoleColors.RESET);
             }
         }
+
         for (Process p : processes) {
             try {
                 p.waitFor();
@@ -141,7 +182,47 @@ public class Initializer {
                 e.printStackTrace();
             }
         }
+        for (Process p : processes) {
+            try {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                String line;
+                StringBuilder output = new StringBuilder();
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append(System.lineSeparator());
+                }
+                String[] outputArr = output.toString().split(";");
+                System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
+                System.out.println(ConsoleColors.WHITE_BOLD + outputArr[outputArr.length - 1] + ConsoleColors.RESET);
+                String fileName = outputArr[0];
+                String[] videoMax = outputArr[1].split(",");
+                String idMax = videoMax[0];
+                Integer popularityMax = Integer.parseInt(videoMax[1]);
+                String[] videoMin = outputArr[2].split(",");
+                String idMin = videoMin[0];
+                Integer popularityMin = Integer.parseInt(videoMin[1]);
+                this.metaDictMin.put(fileName, new MetaData(idMin, popularityMin));
+                this.metaDictMax.put(fileName, new MetaData(idMax, popularityMax));
+                System.out.println(ConsoleColors.GREEN + "The most popular video of " + fileName + " is: " + idMax
+                        + " with " + popularityMax + " popularity" + ConsoleColors.RESET);
+                System.out.println(ConsoleColors.CYAN + "The least popular video of " + fileName + " is: " + idMin
+                        + " with " + popularityMin + " of popularity" + ConsoleColors.RESET);
+                System.out.println();
+                reader.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        String max = findMaxPopularity(metaDictMax);
+        String min = findMinPopularity(metaDictMin);
+        System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.GREEN_BOLD + "The most popular video is: " + metaDictMax.get(findMaxPopularity(metaDictMax)) + " of the file " + max + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.CYAN_BOLD + "The least popular video is: " + metaDictMin.get(findMinPopularity(metaDictMin)) + " of the file " + min +ConsoleColors.RESET);
+        System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
         return 0;
+
     }
 
     /**
