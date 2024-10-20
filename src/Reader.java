@@ -75,7 +75,7 @@ public class Reader {
         System.out.print(args[0] + ";" + metaDictMax.get(findMaxPopularity(metaDictMax)).id + ","
                 + metaDictMax.get(findMaxPopularity(metaDictMax)).popularity + ";"
                 + metaDictMin.get(findMinPopularity(metaDictMin)).id + ","
-                + metaDictMin.get(findMinPopularity(metaDictMin)).popularity + ";" +"Process with PID: " +
+                + metaDictMin.get(findMinPopularity(metaDictMin)).popularity + ";" + "Process with PID: " +
                 ProcessHandle.current().pid() +
                 " File: " + args[0]
                 + " Finish time: " + finishTime
@@ -149,16 +149,16 @@ class Splitter implements Runnable {
                 line = line.substring(line.indexOf("\n") + 1);
                 Reader.lock.unlock();
             } else {
-                //! Cuando cae por aqui botamos la informacion restante
+                // ! Cuando cae por aqui botamos la informacion restante
                 Matcher i = Reader.identification.matcher(line);
                 if (i.find()) {
-                    // Faltan numeros 
+                    // Faltan numeros
                     break;
                 } else {
                     // Falta Id
                     break;
                 }
-                
+
             }
         }
     }
@@ -178,8 +178,6 @@ class Analyzer implements Runnable {
             String videoId = m.group(1);
             return videoId;
         } else {
-            // System.out.println(ConsoleColors.RED_BOLD + "Match ID not found" +
-            // ConsoleColors.RESET);
             return null;
         }
     }
@@ -187,7 +185,7 @@ class Analyzer implements Runnable {
     public void run() {
         int maxPopularity = Integer.MIN_VALUE;
         int minPopularity = Integer.MAX_VALUE;
-        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+        String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
         if (Reader.metaDictMax.get(tid) != null) {
             maxPopularity = Reader.metaDictMax.get(tid).popularity;
         }
