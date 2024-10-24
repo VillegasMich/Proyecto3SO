@@ -47,26 +47,35 @@ public class Reader {
             e.printStackTrace();
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(MAX_T);
+        ExecutorService pool1 = Executors.newFixedThreadPool(MAX_T);
 
         for (int i = 0; i < list.size(); i++) {
             Runnable r1 = new Splitter(i);
-            pool.execute(r1);
+            pool1.execute(r1);
         }
 
+        pool1.shutdown();
         try {
-            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
+            while (!pool1.isTerminated()) {
+                pool1.awaitTermination(1, TimeUnit.MILLISECONDS); // Espera brevemente para no hacer spinlock
+            }
+            // pool1.awaitTermination(600, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
         }
 
+        ExecutorService pool2 = Executors.newFixedThreadPool(MAX_T);
+
         for (int i = 0; i < splittedList.size(); i++) {
             Runnable r1 = new Analyzer(i);
-            pool.execute(r1);
+            pool2.execute(r1);
         }
 
-        pool.shutdown();
+        pool2.shutdown();
         try {
-            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
+            while (!pool2.isTerminated()) {
+                pool2.awaitTermination(1, TimeUnit.MILLISECONDS); // Espera brevemente para no hacer spinlock
+            }
+            // pool2.awaitTermination(600, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
         }
 
@@ -153,9 +162,11 @@ class Splitter implements Runnable {
                 Matcher i = Reader.identification.matcher(line);
                 if (i.find()) {
                     // Faltan numeros
+                    //contar las comas hasta llegar a los numeros
                     break;
                 } else {
                     // Falta Id
+                    //ir al arreglo de antes y buscar la ultima coma en adelante
                     break;
                 }
 
@@ -185,7 +196,7 @@ class Analyzer implements Runnable {
     public void run() {
         int maxPopularity = Integer.MIN_VALUE;
         int minPopularity = Integer.MAX_VALUE;
-        String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
+        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
         if (Reader.metaDictMax.get(tid) != null) {
             maxPopularity = Reader.metaDictMax.get(tid).popularity;
         }
