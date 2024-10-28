@@ -1,7 +1,6 @@
 import java.io.RandomAccessFile;
 import java.time.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,8 +15,9 @@ import java.util.concurrent.locks.Lock;
 
 public class Reader {
     static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
-    static final Pattern identification = Pattern.compile("^(.{11}),");
-    static final Pattern lineStructure = Pattern.compile("^(.{11})(,[0-9.].*?){3}(\\d+),");
+    static final Pattern identification = Pattern.compile("^(.[^,]{10})");
+    static final Pattern lineStructure = Pattern.compile("(.{11})(,[0-9.].*?)*?,(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*?)*?,(\\d+,\\d+,\\d+,\\d+),");
 
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
@@ -29,9 +29,12 @@ public class Reader {
     static Lock lock = new java.util.concurrent.locks.ReentrantLock();
 
     public static void main(String[] args) {
+
         Instant start = Instant.now();
         long pointer = 0;
         try {
+            // RandomAccessFile myRaf = new RandomAccessFile("src/output/FRvideos.csv",
+            // "r");
             RandomAccessFile myRaf = new RandomAccessFile(args[0], "r");
             myRaf.seek(0);
             long length = myRaf.length();
@@ -79,9 +82,14 @@ public class Reader {
         } catch (Exception e) {
         }
 
+        printDict(metaDictMax);
+        printDict(metaDictMin);
+
+        // splittedList.stream().forEach((s) -> System.out.println(s + "\n"));
         LocalTime finishTime = java.time.LocalDateTime.now().toLocalTime();
         Instant end = Instant.now();
-        System.out.print(args[0] + ";" + metaDictMax.get(findMaxPopularity(metaDictMax)).id + ","
+        System.out.print(args[0] + ";" +
+                metaDictMax.get(findMaxPopularity(metaDictMax)).id + ","
                 + metaDictMax.get(findMaxPopularity(metaDictMax)).popularity + ";"
                 + metaDictMin.get(findMinPopularity(metaDictMin)).id + ","
                 + metaDictMin.get(findMinPopularity(metaDictMin)).popularity + ";" + "Process with PID: " +
@@ -150,71 +158,32 @@ class Splitter implements Runnable {
 
     public void run() {
         String line = Reader.list.get(this.listIndex);
+        Boolean flag = false;
         while (true) {
             Matcher m = Reader.lineStructure.matcher(line);
             if (m.find()) {
-                Reader.lock.lock();
+                String videoInfo = "";
                 if (line.indexOf("\n") == -1) {
-                    Reader.splittedList.add(line.substring(0));
-                    Reader.lock.unlock();
+                    videoInfo = line.substring(0);
+                    flag = true;
+                } else {
+                    videoInfo = line.substring(0, line.indexOf("\n"));
+                    line = line.substring(line.indexOf("\n") + 1);
+                }
+                Matcher v = Reader.lineStructure.matcher(videoInfo);
+                if (v.find()) {
+                    Reader.splittedList.add(videoInfo);
+                } else {
+                    // System.out.println(v.find());
+                    // Revisar videoInfo con que no cumple
+                }
+                if (flag) {
                     break;
                 }
-                Reader.splittedList.add(line.substring(0, line.indexOf("\n")));
-                line = line.substring(line.indexOf("\n") + 1);
-                Reader.lock.unlock();
             } else {
 
-                if (line.length() == 0) {
-                    break;
-                }
-
-                // ! Cuando cae por aqui botamos la informacion restante
-                Matcher i = Reader.identification.matcher(line);
-                if (i.find()) {
-                    System.out.println(line + "---------------------- FALTA NUMEROS  \n \n \n \n");
-
-                    // Asegúrate de que no excedas los límites de la lista
-                    if (this.listIndex + 1 < Reader.list.size()) {
-                        String nextLine = Reader.list.get(this.listIndex + 1);
-                        if (nextLine.indexOf("\n") != -1) {
-                            line = line + nextLine.substring(0, nextLine.indexOf("\n"));
-                            Reader.lock.lock();
-                            Reader.splittedList.add(line);
-                            Reader.lock.unlock();
-
-                        } else {
-                            break;
-                        }
-                    }
-                    System.out.println(line + "---------------------- LUEGO DE AÑADIR NUMEROS");
-                    break;
-
-                    // Faltan numeros
-                    // contar las comas hasta llegar a los numeros
-                } else {
-                    // Falta Id
-                    // ir al arreglo de antes y buscar la ultima coma en adelante
-                    if (this.listIndex - 1 != -1) {
-                        int index = -1;
-                        while (i.find()) {
-                            System.out.println(line + "---------------------- FALTAID \n \n \n \n");
-                            line = Reader.list.get(this.listIndex - index)
-                                    .substring(Reader.list.get(this.listIndex - index).lastIndexOf("\n") + 1) + line;
-                            index--;
-                        }
-                        try {
-                            System.out.println(line + "\n LUEGO DE AÑADIR ID \n \n \n");
-                            TimeUnit.SECONDS.sleep(1);
-
-                        } catch (Exception e) {
-                            // TODO: handle exception
-                        }
-
-                    } else {
-                        break;
-                    }
-                }
-
+                // Revisar videoInfo con que no cumple
+                break;
             }
         }
     }
@@ -241,7 +210,7 @@ class Analyzer implements Runnable {
     public void run() {
         int maxPopularity = Integer.MIN_VALUE;
         int minPopularity = Integer.MAX_VALUE;
-        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+        String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
         if (Reader.metaDictMax.get(tid) != null) {
             maxPopularity = Reader.metaDictMax.get(tid).popularity;
         }
@@ -253,11 +222,15 @@ class Analyzer implements Runnable {
             //
             String id = getIdentification(currVideo);
             if (id != null) {
-                Matcher m = Reader.lineStructure.matcher(currVideo);
+                Matcher m = Reader.lineStructureSingle.matcher(currVideo);
                 if (m.find()) {
+                    // System.out.println("id: " + id);
                     String extractedNumbers = m.group(3);
-                    // extractedNumbers = extractedNumbers.split(",")[0];
+                    extractedNumbers = extractedNumbers.split(",")[0];
                     Integer popularityTotal = Integer.parseInt(extractedNumbers);
+                    if (popularityTotal == 0) {
+                        return;
+                    }
                     if (popularityTotal > maxPopularity) {
                         Reader.metaDictMax.put(tid, new MetaData(id, popularityTotal));
                     }

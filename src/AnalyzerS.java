@@ -36,7 +36,7 @@ class AnalyzerS {
   public void run() {
     int maxPopularity = Integer.MIN_VALUE;
     int minPopularity = Integer.MAX_VALUE;
-    String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+    String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
     if (this.metaDictMax.get(tid) != null) {
       maxPopularity = this.metaDictMax.get(tid).popularity;
     }
