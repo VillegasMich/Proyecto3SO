@@ -16,14 +16,14 @@ import java.util.concurrent.locks.Lock;
 
 public class Reader {
     static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
-    static final Pattern identification = Pattern.compile("^([A-Za-z0-9]{11}),");
-    static final Pattern lineStructure = Pattern.compile("^([A-Za-z0-9]{11})(,[0-9.]+).*?(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern identification = Pattern.compile("^(.{11}),");
+    static final Pattern lineStructure = Pattern.compile("^(.{11})(,[0-9.].*?){3}(\\d+),");
 
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
     static List<String> list = new ArrayList<>();
     static List<String> splittedList = new ArrayList<>();
-    static final int MAX_T = 10;
+    static final int MAX_T = 1;
     static Dictionary<String, MetaData> metaDictMax = new Hashtable<>();
     static Dictionary<String, MetaData> metaDictMin = new Hashtable<>();
     static Lock lock = new java.util.concurrent.locks.ReentrantLock();
@@ -152,22 +152,67 @@ class Splitter implements Runnable {
         String line = Reader.list.get(this.listIndex);
         while (true) {
             Matcher m = Reader.lineStructure.matcher(line);
-            if (line.indexOf("\n") != -1 && m.find()) {
+            if (m.find()) {
                 Reader.lock.lock();
+                if (line.indexOf("\n") == -1) {
+                    Reader.splittedList.add(line.substring(0));
+                    Reader.lock.unlock();
+                    break;
+                }
                 Reader.splittedList.add(line.substring(0, line.indexOf("\n")));
                 line = line.substring(line.indexOf("\n") + 1);
                 Reader.lock.unlock();
             } else {
+
+                if (line.length() == 0) {
+                    break;
+                }
+
                 // ! Cuando cae por aqui botamos la informacion restante
                 Matcher i = Reader.identification.matcher(line);
                 if (i.find()) {
-                    // Faltan numeros
-                    //contar las comas hasta llegar a los numeros
+                    System.out.println(line + "---------------------- FALTA NUMEROS  \n \n \n \n");
+
+                    // Asegúrate de que no excedas los límites de la lista
+                    if (this.listIndex + 1 < Reader.list.size()) {
+                        String nextLine = Reader.list.get(this.listIndex + 1);
+                        if (nextLine.indexOf("\n") != -1) {
+                            line = line + nextLine.substring(0, nextLine.indexOf("\n"));
+                            Reader.lock.lock();
+                            Reader.splittedList.add(line);
+                            Reader.lock.unlock();
+
+                        } else {
+                            break;
+                        }
+                    }
+                    System.out.println(line + "---------------------- LUEGO DE AÑADIR NUMEROS");
                     break;
+
+                    // Faltan numeros
+                    // contar las comas hasta llegar a los numeros
                 } else {
                     // Falta Id
-                    //ir al arreglo de antes y buscar la ultima coma en adelante
-                    break;
+                    // ir al arreglo de antes y buscar la ultima coma en adelante
+                    if (this.listIndex - 1 != -1) {
+                        int index = -1;
+                        while (i.find()) {
+                            System.out.println(line + "---------------------- FALTAID \n \n \n \n");
+                            line = Reader.list.get(this.listIndex - index)
+                                    .substring(Reader.list.get(this.listIndex - index).lastIndexOf("\n") + 1) + line;
+                            index--;
+                        }
+                        try {
+                            System.out.println(line + "\n LUEGO DE AÑADIR ID \n \n \n");
+                            TimeUnit.SECONDS.sleep(1);
+
+                        } catch (Exception e) {
+                            // TODO: handle exception
+                        }
+
+                    } else {
+                        break;
+                    }
                 }
 
             }
@@ -208,16 +253,11 @@ class Analyzer implements Runnable {
             //
             String id = getIdentification(currVideo);
             if (id != null) {
-                Matcher m = Reader.popularity.matcher(currVideo);
+                Matcher m = Reader.lineStructure.matcher(currVideo);
                 if (m.find()) {
-                    String extractedNumbers = m.group(1);
-                    String[] numbersArray = extractedNumbers.split(",");
-                    Integer[] popularityArray = Arrays.stream(numbersArray)
-                            .map(Integer::parseInt)
-                            .toArray(Integer[]::new);
-                    Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum(); // sumamos
-                                                                                                                // por
-                                                                                                                // ahora
+                    String extractedNumbers = m.group(3);
+                    // extractedNumbers = extractedNumbers.split(",")[0];
+                    Integer popularityTotal = Integer.parseInt(extractedNumbers);
                     if (popularityTotal > maxPopularity) {
                         Reader.metaDictMax.put(tid, new MetaData(id, popularityTotal));
                     }
