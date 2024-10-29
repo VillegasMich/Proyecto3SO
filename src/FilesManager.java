@@ -1,10 +1,13 @@
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Dictionary;
+import java.util.Hashtable;
 import java.util.List;
 
 public class FilesManager {
@@ -13,8 +16,8 @@ public class FilesManager {
 
   private String folder;
   private String[] paths;
-  private List<byte[]> list;
-  // private int limit = PAGE_LIMIT; // Each char equals 2 bytes; 4k = 4000 bytes
+  // public List<String> list;
+  // public List<String> splittedList;
 
   /**
    * @param folder folder path to work with (relative from your open folder)
@@ -26,7 +29,8 @@ public class FilesManager {
       throw new IllegalArgumentException();
     }
     this.folder = folder;
-    this.list = new ArrayList<>();
+    // this.list = new ArrayList<>();
+    // this.splittedList = new ArrayList<>();
   }
 
   /**
@@ -49,34 +53,71 @@ public class FilesManager {
     for (int i = 0; i < this.paths.length; i++) {
       this.readIndexFile(i);
     }
-    System.out.println("Total pages: " + list.size());
   }
 
-  public void readIndexFile(int index) {
+  public MetaData[] readIndexFile(int index) {
+
+    Dictionary<String, MetaData> metaDictMax = new Hashtable<>();
+    Dictionary<String, MetaData> metaDictMin = new Hashtable<>();
+    List<String> list = new ArrayList<>();
+    List<String> splittedList = new ArrayList<>();
 
     long pointer = 0;
+    Instant start = Instant.now();
     try {
-      Instant start = Instant.now();
-      // System.out.println("Reading file: " + this.paths[index]);
       RandomAccessFile myRaf = new RandomAccessFile(this.folder + this.paths[index], "r");
       myRaf.seek(0);
       long length = myRaf.length();
       byte[] line = new byte[PAGE_LIMIT];
       while (pointer < length) {
-        int numRead = myRaf.read(line, 0, PAGE_LIMIT);
-        // Buscar por los datos en line!!
-        list.add(line);
+        myRaf.read(line, 0, PAGE_LIMIT);
+        list.add(new String(line, StandardCharsets.UTF_8));
         pointer += PAGE_LIMIT;
       }
-      // System.out.println("----------------------------------------------------\n");
-      // System.out.println(new String(line));
-      // System.out.println("----------------------------------------------------\n");
       myRaf.close();
-      Instant end = Instant.now();
-      // System.out.println("Time in process a (millis): " + Duration.between(start, end).toMillis());
     } catch (Exception e) {
       e.printStackTrace();
     }
+
+    for (int i = 0; i < list.size(); i++) {
+      SplitterS splitter = new SplitterS(i, list, splittedList);
+      splitter.run();
+    }
+
+    for (int i = 0; i < splittedList.size(); i++) {
+      AnalyzerS analyzer = new AnalyzerS(i, metaDictMax, metaDictMin, list, splittedList);
+      analyzer.run();
+    }
+
+    MetaData max = new MetaData(metaDictMax.get(DictFinder
+        .findMaxPopularity(metaDictMax)).id, metaDictMax.get(
+            DictFinder
+                .findMaxPopularity(metaDictMax)).popularity);
+    MetaData min = new MetaData(metaDictMin.get(DictFinder
+        .findMinPopularity(metaDictMin)).id, metaDictMin.get(
+            DictFinder
+                .findMinPopularity(metaDictMin)).popularity);
+    MetaData[] maxMin = { max, min };
+
+    System.out.println(ConsoleColors.WHITE_BOLD
+        + "----------------------------------------------------------------------"
+        + ConsoleColors.RESET);
+    Instant end = Instant.now();
+    System.out.println(ConsoleColors.WHITE_BOLD + "File: " + this.paths[index]
+        + " Time in process (millis): "
+        + Duration.between(start, end).toMillis()
+        + " ms" + ConsoleColors.RESET);
+    System.out.println(
+        ConsoleColors.GREEN + "The most popular video of " + this.paths[index] + " is: " + max + ConsoleColors.RESET);
+    System.out.println(
+        ConsoleColors.CYAN + "The least popular video of " + this.paths[index] + " is: " + min + ConsoleColors.RESET);
+
+    System.out.println(ConsoleColors.WHITE_BOLD
+        + "----------------------------------------------------------------------"
+        + ConsoleColors.RESET);
+
+    return maxMin;
+
   }
 
   public String getFolder() {

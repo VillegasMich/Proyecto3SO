@@ -4,7 +4,6 @@ import java.lang.ProcessBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Dictionary;
-import java.util.Enumeration;
 import java.util.Hashtable;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -70,44 +69,6 @@ public class Initializer {
         return core;
     }
 
-    private static String findMaxPopularity(Dictionary<String, MetaData> metaDict) {
-        String maxKey = null;
-        int maxPopularity = Integer.MIN_VALUE;
-
-        // Recorrer todas las claves del Dictionary
-        Enumeration<String> claves = metaDict.keys();
-
-        while (claves.hasMoreElements()) {
-            String clave = claves.nextElement();
-            MetaData metadata = metaDict.get(clave);
-
-            if (metadata.popularity > maxPopularity) {
-                maxPopularity = metadata.popularity;
-                maxKey = clave;
-            }
-        }
-        return maxKey;
-    }
-
-    private static String findMinPopularity(Dictionary<String, MetaData> metaDict) {
-        String minKey = null;
-        int minPopularity = Integer.MAX_VALUE;
-
-        // Recorrer todas las claves del Dictionary
-        Enumeration<String> claves = metaDict.keys();
-
-        while (claves.hasMoreElements()) {
-            String clave = claves.nextElement();
-            MetaData metadata = metaDict.get(clave);
-
-            if (metadata.popularity < minPopularity) {
-                minPopularity = metadata.popularity;
-                minKey = clave;
-            }
-        }
-        return minKey;
-    }
-
     /**
      * Read all the files, where each file must be on an independent
      * thread in the same core as the main program.
@@ -122,12 +83,13 @@ public class Initializer {
             Thread t = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    manager.readIndexFile(Tindex);
+                    MetaData[] metadata = manager.readIndexFile(Tindex);
+                    metaDictMin.put(manager.getPaths()[Tindex], metadata[1]);
+                    metaDictMax.put(manager.getPaths()[Tindex], metadata[0]);
                 }
             });
             t.start();
             threads.add(t);
-            // System.out.println("Thread created: " + Tindex);
             if (i == 0) {
                 LocalTime firtstFile = java.time.LocalDateTime.now().toLocalTime();
                 System.out
@@ -146,6 +108,18 @@ public class Initializer {
                 e.printStackTrace();
             }
         }
+        String max = DictFinder.findMaxPopularity(metaDictMax);
+        String min = DictFinder.findMinPopularity(metaDictMin);
+        System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.GREEN_BOLD + "The most popular video is: "
+                + metaDictMax.get(DictFinder.findMaxPopularity(metaDictMax)) + " of the file " + max
+                + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.CYAN_BOLD + "The least popular video is: "
+                + metaDictMin.get(DictFinder.findMinPopularity(metaDictMin)) + " of the file " + min
+                + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
         return 0;
     }
 
@@ -192,7 +166,8 @@ public class Initializer {
                 }
                 String[] outputArr = output.toString().split(";");
                 System.out.println(ConsoleColors.WHITE_BOLD
-                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
+                        + "----------------------------------------------------------------------"
+                        + ConsoleColors.RESET);
                 System.out.println(ConsoleColors.WHITE_BOLD + outputArr[outputArr.length - 1] + ConsoleColors.RESET);
                 String fileName = outputArr[0];
                 String[] videoMax = outputArr[1].split(",");
@@ -213,16 +188,42 @@ public class Initializer {
                 e.printStackTrace();
             }
         }
-        String max = findMaxPopularity(metaDictMax);
-        String min = findMinPopularity(metaDictMin);
+        String max = DictFinder.findMaxPopularity(metaDictMax);
+        String min = DictFinder.findMinPopularity(metaDictMin);
         System.out.println(ConsoleColors.WHITE_BOLD
                 + "----------------------------------------------------------------------" + ConsoleColors.RESET);
-        System.out.println(ConsoleColors.GREEN_BOLD + "The most popular video is: " + metaDictMax.get(findMaxPopularity(metaDictMax)) + " of the file " + max + ConsoleColors.RESET);
-        System.out.println(ConsoleColors.CYAN_BOLD + "The least popular video is: " + metaDictMin.get(findMinPopularity(metaDictMin)) + " of the file " + min +ConsoleColors.RESET);
+        System.out.println(ConsoleColors.GREEN_BOLD + "The most popular video is: "
+                + metaDictMax.get(DictFinder.findMaxPopularity(metaDictMax)) + " of the file " + max
+                + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.CYAN_BOLD + "The least popular video is: "
+                + metaDictMin.get(DictFinder.findMinPopularity(metaDictMin)) + " of the file " + min
+                + ConsoleColors.RESET);
         System.out.println(ConsoleColors.WHITE_BOLD
                 + "----------------------------------------------------------------------" + ConsoleColors.RESET);
         return 0;
 
+    }
+
+    private int pathDefault() {
+        for (int i = 0; i < this.pathsLength; i++) {
+            MetaData[] metadata = manager.readIndexFile(i);
+            metaDictMin.put(manager.getPaths()[i], metadata[1]);
+            metaDictMax.put(manager.getPaths()[i], metadata[0]);
+
+        }
+        String max = DictFinder.findMaxPopularity(metaDictMax);
+        String min = DictFinder.findMinPopularity(metaDictMin);
+        System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.GREEN_BOLD + "The most popular video is: "
+                + metaDictMax.get(DictFinder.findMaxPopularity(metaDictMax)) + " of the file " + max
+                + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.CYAN_BOLD + "The least popular video is: "
+                + metaDictMin.get(DictFinder.findMinPopularity(metaDictMin)) + " of the file " + min
+                + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.WHITE_BOLD
+                + "----------------------------------------------------------------------" + ConsoleColors.RESET);
+        return 0;
     }
 
     /**
@@ -240,7 +241,7 @@ public class Initializer {
         } else if (this.flag.length != 0 && this.flag.length == 3 && this.flag[0].equals("-s")) { // path -s
             pathS();
         } else { // path no flag
-            manager.readAllFiles();
+            pathDefault();
         }
         Instant endTime = Instant.now();
         long executionTime = Duration.between(startTime, endTime).toMillis();

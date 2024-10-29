@@ -1,7 +1,6 @@
 import java.io.RandomAccessFile;
 import java.time.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -14,10 +13,16 @@ import java.util.Hashtable;
 import java.util.Enumeration;
 import java.util.concurrent.locks.Lock;
 
+/* 
+ * Perfect: US CA GB IN JP KR RU
+ * Not perfect: FR-(max) DE-(min) MX-(min)
+ * */
+
 public class Reader {
     static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
-    static final Pattern identification = Pattern.compile("^([A-Za-z0-9]{11}),");
-    static final Pattern lineStructure = Pattern.compile("^([A-Za-z0-9]{11})(,[0-9.]+).*?(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern identification = Pattern.compile("^(.[^,]{10})");
+    static final Pattern lineStructure = Pattern.compile("(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
 
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
@@ -29,9 +34,12 @@ public class Reader {
     static Lock lock = new java.util.concurrent.locks.ReentrantLock();
 
     public static void main(String[] args) {
+
         Instant start = Instant.now();
         long pointer = 0;
         try {
+            // RandomAccessFile myRaf = new RandomAccessFile("src/output/CAvideos.csv",
+            // "r");
             RandomAccessFile myRaf = new RandomAccessFile(args[0], "r");
             myRaf.seek(0);
             long length = myRaf.length();
@@ -47,35 +55,49 @@ public class Reader {
             e.printStackTrace();
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(MAX_T);
+        ExecutorService pool1 = Executors.newFixedThreadPool(MAX_T);
 
         for (int i = 0; i < list.size(); i++) {
             Runnable r1 = new Splitter(i);
-            pool.execute(r1);
+            pool1.execute(r1);
         }
 
+        pool1.shutdown();
         try {
-            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
+            while (!pool1.isTerminated()) {
+                pool1.awaitTermination(1, TimeUnit.MILLISECONDS); // Espera brevemente para no hacer spinlock
+            }
         } catch (Exception e) {
+            pool1.shutdownNow();
         }
+
+        ExecutorService pool2 = Executors.newFixedThreadPool(MAX_T);
 
         for (int i = 0; i < splittedList.size(); i++) {
             Runnable r1 = new Analyzer(i);
-            pool.execute(r1);
+            pool2.execute(r1);
         }
 
-        pool.shutdown();
+        pool2.shutdown();
         try {
-            pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
+            while (!pool2.isTerminated()) {
+                pool2.awaitTermination(1, TimeUnit.MILLISECONDS); // Espera brevemente para no hacer spinlock
+            }
         } catch (Exception e) {
+            pool2.shutdownNow();
         }
 
+        // printDict(metaDictMax);
+        // printDict(metaDictMin);
+
+        // splittedList.stream().forEach((s) -> System.out.println(s + "\n"));
         LocalTime finishTime = java.time.LocalDateTime.now().toLocalTime();
         Instant end = Instant.now();
-        System.out.print(args[0] + ";" + metaDictMax.get(findMaxPopularity(metaDictMax)).id + ","
+        System.out.print(args[0] + ";" +
+                metaDictMax.get(findMaxPopularity(metaDictMax)).id + ","
                 + metaDictMax.get(findMaxPopularity(metaDictMax)).popularity + ";"
                 + metaDictMin.get(findMinPopularity(metaDictMin)).id + ","
-                + metaDictMin.get(findMinPopularity(metaDictMin)).popularity + ";" +"Process with PID: " +
+                + metaDictMin.get(findMinPopularity(metaDictMin)).popularity + ";" + "Process with PID: " +
                 ProcessHandle.current().pid() +
                 " File: " + args[0]
                 + " Finish time: " + finishTime
@@ -141,24 +163,32 @@ class Splitter implements Runnable {
 
     public void run() {
         String line = Reader.list.get(this.listIndex);
-        while (true) {
+        Boolean flag = false;
+        while (!flag) {
             Matcher m = Reader.lineStructure.matcher(line);
-            if (line.indexOf("\n") != -1 && m.find()) {
-                Reader.lock.lock();
-                Reader.splittedList.add(line.substring(0, line.indexOf("\n")));
-                line = line.substring(line.indexOf("\n") + 1);
-                Reader.lock.unlock();
-            } else {
-                //! Cuando cae por aqui botamos la informacion restante
-                Matcher i = Reader.identification.matcher(line);
-                if (i.find()) {
-                    // Faltan numeros 
-                    break;
+            if (m.find()) {
+                String videoInfo = "";
+                if (line.indexOf("\n") == -1) {
+                    videoInfo = line.substring(0);
+                    flag = true;
                 } else {
-                    // Falta Id
-                    break;
+                    videoInfo = line.substring(0, line.indexOf("\n"));
+                    int pos = line.indexOf("\n") + 1;
+                    if (pos == 0) {
+                        flag = true;
+                    }
+                    line = line.substring(pos);
                 }
-                
+                Matcher v = Reader.lineStructure.matcher(videoInfo);
+                if (v.find()) {
+                    Reader.splittedList.add(videoInfo);
+                } else {
+                    // System.out.println(v.find());
+                    // Revisar videoInfo con que no cumple
+                }
+            } else {
+                // Revisar videoInfo con que no cumple
+                flag = true;
             }
         }
     }
@@ -178,8 +208,6 @@ class Analyzer implements Runnable {
             String videoId = m.group(1);
             return videoId;
         } else {
-            // System.out.println(ConsoleColors.RED_BOLD + "Match ID not found" +
-            // ConsoleColors.RESET);
             return null;
         }
     }
@@ -187,7 +215,7 @@ class Analyzer implements Runnable {
     public void run() {
         int maxPopularity = Integer.MIN_VALUE;
         int minPopularity = Integer.MAX_VALUE;
-        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+        String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
         if (Reader.metaDictMax.get(tid) != null) {
             maxPopularity = Reader.metaDictMax.get(tid).popularity;
         }
@@ -199,16 +227,14 @@ class Analyzer implements Runnable {
             //
             String id = getIdentification(currVideo);
             if (id != null) {
-                Matcher m = Reader.popularity.matcher(currVideo);
+                Matcher m = Reader.lineStructureSingle.matcher(currVideo);
                 if (m.find()) {
-                    String extractedNumbers = m.group(1);
-                    String[] numbersArray = extractedNumbers.split(",");
-                    Integer[] popularityArray = Arrays.stream(numbersArray)
-                            .map(Integer::parseInt)
-                            .toArray(Integer[]::new);
-                    Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum(); // sumamos
-                                                                                                                // por
-                                                                                                                // ahora
+                    String extractedNumbers = m.group(3);
+                    extractedNumbers = extractedNumbers.split(",")[0];
+                    Integer popularityTotal = Integer.parseInt(extractedNumbers);
+                    if (popularityTotal == 0) {
+                        return;
+                    }
                     if (popularityTotal > maxPopularity) {
                         Reader.metaDictMax.put(tid, new MetaData(id, popularityTotal));
                     }
