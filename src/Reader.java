@@ -13,11 +13,16 @@ import java.util.Hashtable;
 import java.util.Enumeration;
 import java.util.concurrent.locks.Lock;
 
+/* 
+ * Perfect: US DE CA GB MX IN JP KR RU
+ * Not perfect: FR 
+ * */
+
 public class Reader {
     static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
     static final Pattern identification = Pattern.compile("^(.[^,]{10})");
-    static final Pattern lineStructure = Pattern.compile("(.{11})(,[0-9.].*?)*?,(\\d+,\\d+,\\d+,\\d+),");
-    static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*?)*?,(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern lineStructure = Pattern.compile("(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
 
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
@@ -33,7 +38,7 @@ public class Reader {
         Instant start = Instant.now();
         long pointer = 0;
         try {
-            // RandomAccessFile myRaf = new RandomAccessFile("src/output/FRvideos.csv",
+            // RandomAccessFile myRaf = new RandomAccessFile("src/output/CAvideos.csv",
             // "r");
             RandomAccessFile myRaf = new RandomAccessFile(args[0], "r");
             myRaf.seek(0);
@@ -62,8 +67,8 @@ public class Reader {
             while (!pool1.isTerminated()) {
                 pool1.awaitTermination(1, TimeUnit.MILLISECONDS); // Espera brevemente para no hacer spinlock
             }
-            // pool1.awaitTermination(600, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            pool1.shutdownNow();
         }
 
         ExecutorService pool2 = Executors.newFixedThreadPool(MAX_T);
@@ -78,8 +83,8 @@ public class Reader {
             while (!pool2.isTerminated()) {
                 pool2.awaitTermination(1, TimeUnit.MILLISECONDS); // Espera brevemente para no hacer spinlock
             }
-            // pool2.awaitTermination(600, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            pool2.shutdownNow();
         }
 
         printDict(metaDictMax);
@@ -159,7 +164,7 @@ class Splitter implements Runnable {
     public void run() {
         String line = Reader.list.get(this.listIndex);
         Boolean flag = false;
-        while (true) {
+        while (!flag) {
             Matcher m = Reader.lineStructure.matcher(line);
             if (m.find()) {
                 String videoInfo = "";
@@ -168,7 +173,11 @@ class Splitter implements Runnable {
                     flag = true;
                 } else {
                     videoInfo = line.substring(0, line.indexOf("\n"));
-                    line = line.substring(line.indexOf("\n") + 1);
+                    int pos = line.indexOf("\n") + 1;
+                    if (pos == 0) {
+                        flag = true;
+                    }
+                    line = line.substring(pos);
                 }
                 Matcher v = Reader.lineStructure.matcher(videoInfo);
                 if (v.find()) {
@@ -177,13 +186,9 @@ class Splitter implements Runnable {
                     // System.out.println(v.find());
                     // Revisar videoInfo con que no cumple
                 }
-                if (flag) {
-                    break;
-                }
             } else {
-
                 // Revisar videoInfo con que no cumple
-                break;
+                flag = true;
             }
         }
     }
