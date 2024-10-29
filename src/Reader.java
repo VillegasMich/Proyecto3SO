@@ -22,7 +22,7 @@ public class Reader {
     static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
     static final Pattern identification = Pattern.compile("^(.[^,]{10})");
     static final Pattern lineStructure = Pattern.compile("(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
-    static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
+    static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),[a-zA-Z]");
 
     static int index = 0;
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
@@ -187,8 +187,59 @@ class Splitter implements Runnable {
                     // Revisar videoInfo con que no cumple
                 }
             } else {
+                Matcher idMatcher = Reader.identification.matcher(line);
+                Matcher popMatcher = Reader.popularity.matcher(line);
+                if (idMatcher.find() && !popMatcher.find()) {
+                    int index = 1;
+                    if (this.listIndex + index < Reader.list.size()
+                            && Reader.list.get(this.listIndex + index).indexOf("\n") != -1) {
+                        line = line + Reader.list.get(this.listIndex + index).substring(0,
+                                Reader.list.get(this.listIndex + index).indexOf("\n"));
+                    }
+                    String videoInfo = "";
+                    if (line.indexOf("\n") == -1) {
+                        videoInfo = line.substring(0);
+                        flag = true;
+                    } else {
+                        videoInfo = line.substring(0, line.indexOf("\n"));
+                        int pos = line.indexOf("\n") + 1;
+                        if (pos == 0) {
+                            flag = true;
+                        }
+                        line = line.substring(pos);
+                    }
+                    Matcher v = Reader.lineStructure.matcher(videoInfo);
+                    if (v.find()) {
+                        Reader.splittedList.add(videoInfo);
+                    }
+                    if (line.length() == 0) {
+                        break;
+                    }
+                    // falta popularidad
+                } else {
+                    int index = 1;
+                    if (this.listIndex - index >= 0) {
+                        line = Reader.list.get(this.listIndex - index)
+                                .substring(Reader.list.get(this.listIndex - index).lastIndexOf("\n") + 1) + line;
+                    }
+                    String videoInfo = "";
+                    if (line.indexOf("\n") == -1) {
+                        videoInfo = line.substring(0);
+                        flag = true;
+                    } else {
+                        videoInfo = line.substring(0, line.indexOf("\n"));
+                        int pos = line.indexOf("\n") + 1;
+                        if (pos == 0) {
+                            flag = true;
+                        }
+                        line = line.substring(pos);
+                    }
+                    Matcher v = Reader.lineStructure.matcher(videoInfo);
+                    if (v.find()) {
+                        Reader.splittedList.add(videoInfo);
+                    }
+                }
                 // Revisar videoInfo con que no cumple
-                flag = true;
             }
         }
     }
@@ -215,7 +266,7 @@ class Analyzer implements Runnable {
     public void run() {
         int maxPopularity = Integer.MIN_VALUE;
         int minPopularity = Integer.MAX_VALUE;
-        String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
+        String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
         if (Reader.metaDictMax.get(tid) != null) {
             maxPopularity = Reader.metaDictMax.get(tid).popularity;
         }
