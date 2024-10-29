@@ -14,8 +14,8 @@ import java.util.Enumeration;
 import java.util.concurrent.locks.Lock;
 
 /* 
- * Perfect: US DE CA GB MX IN JP KR RU
- * Not perfect: FR 
+ * Perfect: US CA GB IN JP KR RU
+ * Not perfect: FR-(max) DE-(min) MX-(min)
  * */
 
 public class Reader {
@@ -28,7 +28,7 @@ public class Reader {
     static final int PAGE_LIMIT = 4096; // Each char equals 2 bytes; 4k = 4000 bytes
     static List<String> list = new ArrayList<>();
     static List<String> splittedList = new ArrayList<>();
-    static final int MAX_T = 1;
+    static final int MAX_T = 10;
     static Dictionary<String, MetaData> metaDictMax = new Hashtable<>();
     static Dictionary<String, MetaData> metaDictMin = new Hashtable<>();
     static Lock lock = new java.util.concurrent.locks.ReentrantLock();
@@ -87,8 +87,8 @@ public class Reader {
             pool2.shutdownNow();
         }
 
-        printDict(metaDictMax);
-        printDict(metaDictMin);
+        // printDict(metaDictMax);
+        // printDict(metaDictMin);
 
         // splittedList.stream().forEach((s) -> System.out.println(s + "\n"));
         LocalTime finishTime = java.time.LocalDateTime.now().toLocalTime();
@@ -229,7 +229,6 @@ class Analyzer implements Runnable {
             if (id != null) {
                 Matcher m = Reader.lineStructureSingle.matcher(currVideo);
                 if (m.find()) {
-                    // System.out.println("id: " + id);
                     String extractedNumbers = m.group(3);
                     extractedNumbers = extractedNumbers.split(",")[0];
                     Integer popularityTotal = Integer.parseInt(extractedNumbers);

@@ -1,4 +1,3 @@
-import java.util.Arrays;
 import java.util.Dictionary;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -12,8 +11,9 @@ class AnalyzerS {
   public List<String> splittedList;
 
   static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
-  static final Pattern identification = Pattern.compile("^([A-Za-z0-9]{11}),");
-  static final Pattern lineStructure = Pattern.compile("^([A-Za-z0-9]{11})(,[0-9.]+).*?(\\d+,\\d+,\\d+,\\d+),");
+  static final Pattern identification = Pattern.compile("^(.[^,]{10})");
+  static final Pattern lineStructure = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
+  static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
 
   public AnalyzerS(int i, Dictionary<String, MetaData> metaDictMax, Dictionary<String, MetaData> metaDictMin,
       List<String> list, List<String> splittedList) {
@@ -48,16 +48,14 @@ class AnalyzerS {
       //
       String id = getIdentification(currVideo);
       if (id != null) {
-        Matcher m = popularity.matcher(currVideo);
+        Matcher m = lineStructureSingle.matcher(currVideo);
         if (m.find()) {
-          String extractedNumbers = m.group(1);
-          String[] numbersArray = extractedNumbers.split(",");
-          Integer[] popularityArray = Arrays.stream(numbersArray)
-              .map(Integer::parseInt)
-              .toArray(Integer[]::new);
-          Integer popularityTotal = Arrays.stream(popularityArray).mapToInt(Integer::intValue).sum(); // sumamos
-                                                                                                      // por
-                                                                                                      // ahora
+          String extractedNumbers = m.group(3);
+          extractedNumbers = extractedNumbers.split(",")[0];
+          Integer popularityTotal = Integer.parseInt(extractedNumbers);
+          if (popularityTotal == 0) {
+            return;
+          }
           if (popularityTotal > maxPopularity) {
             this.metaDictMax.put(tid, new MetaData(id, popularityTotal));
           }
