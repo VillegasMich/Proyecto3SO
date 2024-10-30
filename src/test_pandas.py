@@ -9,7 +9,7 @@ def most_viewed_video(csv_file):
     df = pd.read_csv(csv_file, encoding_errors="ignore")
 
     # Find the row with the maximum number of views
-    max_views_row = df.loc[df["views"].idxmax()]
+    max_views_row = df.loc[df["views"].idxmin()]
 
     # Extract the title of the most viewed video
     most_viewed_id = max_views_row["video_id"]

@@ -13,7 +13,7 @@ class AnalyzerS {
   static final Pattern popularity = Pattern.compile("(\\d+,\\d+,\\d+,\\d+)");
   static final Pattern identification = Pattern.compile("^(.[^,]{10})");
   static final Pattern lineStructure = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
-  static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),");
+  static final Pattern lineStructureSingle = Pattern.compile("^(.{11})(,[0-9.].*),(\\d+,\\d+,\\d+,\\d+),[a-zA-Z]");
 
   public AnalyzerS(int i, Dictionary<String, MetaData> metaDictMax, Dictionary<String, MetaData> metaDictMin,
       List<String> list, List<String> splittedList) {
@@ -36,7 +36,9 @@ class AnalyzerS {
   public void run() {
     int maxPopularity = Integer.MIN_VALUE;
     int minPopularity = Integer.MAX_VALUE;
-    String tid = String.valueOf(Thread.currentThread().getId()); // get the key of the current thread
+    // String tid = String.valueOf(Thread.currentThread().getId()); // get the key
+    // of the current thread
+    String tid = String.valueOf(Thread.currentThread().threadId()); // get the key of the current thread
     if (this.metaDictMax.get(tid) != null) {
       maxPopularity = this.metaDictMax.get(tid).popularity;
     }
